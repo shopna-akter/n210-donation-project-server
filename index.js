@@ -32,24 +32,39 @@ async function run() {
             const result = await foodCollection.insertOne(newFood)
             res.send(result)
         })
+        app.get('/foods/:name', async (req, res) => {
+            const name = req.params.name;
+            const query = { Food_name: name };
+            try {
+                const cursor = await foodCollection.find(query);
+                const result = await cursor.toArray();
+                if (result.length === 0) {
+                    return res.status(404).send("No foods found");
+                }
+                res.send(result);
+            } catch (error) {
+                console.error("Error fetching foods by name:", error);
+                res.status(500).send("Internal server error");
+            }
+        });
+        
+        
+                
         app.put('/foods/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
-            const option = { upsert: true }
-            const updatedTour = req.body
-            const tour = {
+            const updatedFood = req.body
+            const Food = {
                 $set: {
-                    short_description: updatedTour.short_description,
-                    totalVisitorsPerYear: updatedTour.totalVisitorsPerYear,
-                    tourists_spot_name: updatedTour.tourists_spot_name,
-                    country_Name: updatedTour.country_Name,
-                    location: updatedTour.location,
-                    seasonality: updatedTour.seasonality,
-                    average_cost: updatedTour.average_cost,
-                    travel_time: updatedTour.travel_time,
+                    Additional_Notes: updatedFood.Additional_Notes,
+                    Quantity: updatedFood.Quantity,
+                    Expired_Date: updatedFood.Expired_Date,
+                    Pickup_Location: updatedFood.Pickup_Location,
+                    Food_Status: updatedFood.Food_Status,
+                    Food_name: updatedFood.Food_name,
                 }
             }
-            const result = await foodCollection.updateOne(filter, tour, option);
+            const result = await foodCollection.updateOne(filter, Food);
             res.send(result);
         });
         app.delete('/foods/:id', async (req, res) => {
