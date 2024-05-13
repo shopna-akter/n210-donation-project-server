@@ -39,7 +39,7 @@ async function run() {
             .send({success: true});
         })
 
-        // direct web operation
+        //direct web operation
         app.get('/foods', async (req, res) => {
             try {
                 const result = await foodCollection.find().sort({ Quantity: -1 }).limit(6).toArray();
@@ -49,14 +49,18 @@ async function run() {
                 res.status(500).json({ message: 'Server error' });
             }
         });
-        
-        app.post('/foods', async (req, res) => {
+        app.get('/allFoods', async (req, res) => {
+            const cursor = foodCollection.find()
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+        app.post('/allFoods', async (req, res) => {
             const newFood = req.body
             console.log(newFood);
             const result = await foodCollection.insertOne(newFood)
             res.send(result)
         })
-        app.get('/foods/:name', async (req, res) => {
+        app.get('/allFoods/:name', async (req, res) => {
             const name = req.params.name;
             const query = { Food_name: name };
             try {
@@ -74,7 +78,7 @@ async function run() {
         
         
                 
-        app.put('/foods/:id', async (req, res) => {
+        app.put('/allFoods/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
             const updatedFood = req.body
@@ -91,13 +95,13 @@ async function run() {
             const result = await foodCollection.updateOne(filter, Food);
             res.send(result);
         });
-        app.delete('/foods/:id', async (req, res) => {
+        app.delete('/allFoods/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await foodCollection.deleteOne(query);
             res.send(result)
         });
-        app.get('/foods/:id', async (req, res) => {
+        app.get('/allFoods/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await foodCollection.findOne(query);
