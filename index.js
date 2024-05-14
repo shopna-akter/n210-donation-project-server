@@ -14,7 +14,8 @@ app.use(cors({
 app.use(express.json())
 app.use(cookieparser())
 
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.2yyywnk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.2yyywnk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-3gbmzmz-shard-00-00.2yyywnk.mongodb.net:27017,ac-3gbmzmz-shard-00-01.2yyywnk.mongodb.net:27017,ac-3gbmzmz-shard-00-02.2yyywnk.mongodb.net:27017/?ssl=true&replicaSet=atlas-tlfdmm-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0`
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -22,6 +23,25 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+
+const logger = (req , res , next) => {
+    console.log('log: info',req.method , req.url);
+    next()
+}
+const verifyToken = (req , res , next) => {
+    const token = req?.cookies?.token
+    if(!token){
+        return res.status(401).send({message: 'Unauthorized access'})
+    }
+    jwt.verify(token , process.env.ACCESS_TOKEN_SECRET , (err ,decoded) => {
+        if(err){
+            return res.status(401).send({message: 'Unauthorized access'})
+        }
+        req.user = decoded
+        next()
+    })
+    // next()
+}
 
 async function run() {
     try {
@@ -32,8 +52,7 @@ async function run() {
         // auth related api
         app.post('/jwt', async (req, res) => {
             const user = req.body;
-            console.log(user);
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1s' })
             res
                 .cookie('token', token, {
                     httpOnly: true,
@@ -52,16 +71,26 @@ async function run() {
         //request operation
         app.post('/requests' , async(req , res)=>{
             const request = req.body
-            console.log(request);
             const result  = await requestCollection.insertOne(request)
             res.send(result)
         })
-        app.get('/requests', async (req, res) => {
-            const cursor = requestCollection.find()
-            const result = await cursor.toArray();
+        app.get('/requests', logger , verifyToken, async (req, res) => {
+            console.log('owner info' , req.user);
+            if(req.user.email !== req.query.email){
+                return res.status(403).send({message: 'forbidden access'})
+            }
+            let query = {};
+            if(req.query?.email){
+                query = {User_Email: req.query.email}
+            }
+            const result = await requestCollection.find(query).toArray()
+            res.send(result)
+        });
+        // Food operation
+        app.get('/availableFoods',async(req,res)=>{
+            const result = await foodCollection.find({ Food_Status: 'available' }).toArray();
             res.send(result)
         })
-        // Food operation 
         app.get('/featuredFoods', async (req, res) => {
             try {
                 const result = await foodCollection.find().sort({ Quantity: -1 }).limit(6).toArray();
@@ -87,7 +116,6 @@ async function run() {
         })
         app.post('/foods', async (req, res) => {
             const newFood = req.body
-            console.log(newFood);
             const result = await foodCollection.insertOne(newFood)
             res.send(result)
         })
@@ -142,12 +170,9 @@ async function run() {
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
-        // Ensures that the client will close when you finish/error
-        // await client.close();
     }
 }
 run().catch(console.dir);
-
 
 app.get('/', (req, res) => {
     res.send('food server is running')
