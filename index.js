@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors')
 const jwt = require('jsonwebtoken')
+const cookieparser = require('cookie-parser')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 const app = express()
@@ -11,6 +12,7 @@ app.use(cors({
     credentials: true
 }))
 app.use(express.json())
+app.use(cookieparser())
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.2yyywnk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const client = new MongoClient(uri, {
@@ -24,22 +26,42 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         await client.connect();
+        // databases
         const foodCollection = client.db('foodDB').collection('food')
-
+        const requestCollection = client.db('foodDB').collection('request')
         // auth related api
-        app.post('/jwt' , async(req ,res)=>{
+        app.post('/jwt', async (req, res) => {
             const user = req.body;
             console.log(user);
-            const token = jwt.sign(user , process.env.ACCESS_TOKEN_SECRET , {expiresIn: '1h'})
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             res
-            .cookie('token' , token, {
-                httpOnly: true ,
-                secure: false,
-            })
-            .send({success: true});
+                .cookie('token', token, {
+                    httpOnly: true,
+                    secure: false,
+                })
+                .send({ success: true });
+        })
+        app.post('/logout', (req, res) => {
+            const user = req.body
+            console.log('loging out', user);
+            res.clearCookie('token', { maxAge: 0 }).send({ success: true })
         })
 
         //direct web operation
+
+        //request operation
+        app.post('/requests' , async(req , res)=>{
+            const request = req.body
+            console.log(request);
+            const result  = await requestCollection.insertOne(request)
+            res.send(result)
+        })
+        app.get('/requests', async (req, res) => {
+            const cursor = requestCollection.find()
+            const result = await cursor.toArray();
+            res.send(result)
+        })
+        // Food operation 
         app.get('/featuredFoods', async (req, res) => {
             try {
                 const result = await foodCollection.find().sort({ Quantity: -1 }).limit(6).toArray();
@@ -57,7 +79,7 @@ async function run() {
                 console.error(error);
                 res.status(500).json({ message: 'Server error' });
             }
-        });           
+        });
         app.get('/foods', async (req, res) => {
             const cursor = foodCollection.find()
             const result = await cursor.toArray();
@@ -84,9 +106,9 @@ async function run() {
                 res.status(500).send("Internal server error");
             }
         });
-        
-        
-                
+
+
+
         app.put('/foods/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
