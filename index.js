@@ -8,7 +8,9 @@ const app = express()
 const port = process.env.PORT || 5000
 
 app.use(cors({
-    origin: ['http://localhost:5173'],
+    origin: ["http://localhost:5173",
+        "https://assignment-p11.web.app",
+        "https://assignment-p11.firebaseapp.com"],
     credentials: true
 }))
 app.use(express.json())
@@ -24,70 +26,69 @@ const client = new MongoClient(uri, {
     }
 });
 
-const logger = (req , res , next) => {
-    console.log('log: info',req.method , req.url);
+const logger = (req, res, next) => {
+    console.log('log: info', req.method, req.url);
     next()
 }
-const verifyToken = (req , res , next) => {
+const verifyToken = (req, res, next) => {
     const token = req?.cookies?.token
-    if(!token){
-        return res.status(401).send({message: 'Unauthorized access'})
+    if (!token) {
+        return res.status(401).send({ message: 'Unauthorized access' })
     }
-    jwt.verify(token , process.env.ACCESS_TOKEN_SECRET , (err ,decoded) => {
-        if(err){
-            return res.status(401).send({message: 'Unauthorized access'})
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: 'Unauthorized access' })
         }
         req.user = decoded
         next()
     })
     // next()
 }
-
+const cookieOption = {
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    secure: process.env.NODE_ENV === "production" ? true : false
+}
 async function run() {
     try {
-        await client.connect();
+        // await client.connect();
         // databases
         const foodCollection = client.db('foodDB').collection('food')
         const requestCollection = client.db('foodDB').collection('request')
         // auth related api
         app.post('/jwt', async (req, res) => {
             const user = req.body;
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1s' })
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             res
-                .cookie('token', token, {
-                    httpOnly: true,
-                    secure: false,
-                })
+                .cookie('token', token, cookieOption)
                 .send({ success: true });
         })
         app.post('/logout', (req, res) => {
             const user = req.body
-            console.log('loging out', user);
-            res.clearCookie('token', { maxAge: 0 }).send({ success: true })
+            res.clearCookie('token', { ...cookieOption , maxAge: 0 })
+            .send({ success: true })
         })
 
         //direct web operation
-
         //request operation
-        app.post('/requests' , async(req , res)=>{
+        app.post('/requests', async (req, res) => {
             const request = req.body
-            const result  = await requestCollection.insertOne(request)
+            const result = await requestCollection.insertOne(request)
             res.send(result)
         })
-        app.get('/requests', logger , verifyToken, async (req, res) => {
-            console.log('owner info' , req.user);
-            if(req.user.email !== req.query.email){
-                return res.status(403).send({message: 'forbidden access'})
+        app.get('/requests', logger, verifyToken, async (req, res) => {
+            if (req.user.email !== req.query.email) {
+                return res.status(403).send({ message: 'forbidden access' })
             }
             let query = {};
-            if(req.query?.email){
-                query = {User_Email: req.query.email}
+            if (req.query?.email) {
+                query = { User_Email: req.query.email }
             }
             const result = await requestCollection.find(query).toArray()
             res.send(result)
         });
         // Food operation
-        app.get('/availableFoods',async(req,res)=>{
+        app.get('/availableFoods', async (req, res) => {
             const result = await foodCollection.find({ Food_Status: 'available' }).toArray();
             res.send(result)
         })
@@ -121,7 +122,7 @@ async function run() {
         })
         app.get('/foods/:name', async (req, res) => {
             const name = req.params.name;
-            const query = { Food_name: name };
+            const query = { Food_name: { $regex: new RegExp(name, "i") } };
             try {
                 const cursor = await foodCollection.find(query);
                 const result = await cursor.toArray();
@@ -135,8 +136,6 @@ async function run() {
             }
         });
 
-
-
         app.put('/foods/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) };
@@ -146,8 +145,9 @@ async function run() {
                     Additional_Notes: updatedFood.Additional_Notes,
                     Quantity: updatedFood.Quantity,
                     Expired_Date: updatedFood.Expired_Date,
-                    Pickup_Location: updatedFood.Pickup_Location,
                     Food_Status: updatedFood.Food_Status,
+                    Pickup_Location: updatedFood.Pickup_Location,
+                    Food_Image: updatedFood.Food_Image,
                     Food_name: updatedFood.Food_name,
                 }
             }
@@ -160,15 +160,14 @@ async function run() {
             const result = await foodCollection.deleteOne(query);
             res.send(result)
         });
-        app.get('/foods/:id', async (req, res) => {
+        app.get('/food/:id', async (req, res) => {
             const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
+            const query = {_id: new ObjectId(id) };
             const result = await foodCollection.findOne(query);
             res.send(result)
         });
-
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
     }
 }
